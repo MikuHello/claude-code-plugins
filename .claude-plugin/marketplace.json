@@ -1,0 +1,12 @@
+{
+  "name": "mikuhello",
+  "owner": { "name": "MikuHello" },
+  "description": "MikuHello's Claude Code plugins.",
+  "plugins": [
+    {
+      "name": "usage-band",
+      "source": "./plugins/usage-band",
+      "description": "A usage band under the prompt: context usage by category, the 5h / 7d plan limits and the session cost."
+    }
+  ]
+}

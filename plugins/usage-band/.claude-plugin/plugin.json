@@ -1,0 +1,68 @@
+{
+  "name": "usage-band",
+  "version": "0.6.0",
+  "description": "Usage band under the prompt: context usage coloured by category with each share, the 5h / 7d plan limits and the session cost.",
+  "author": {
+    "name": "MikuHello"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/MikuHello/claude-code-plugins",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language / 语言",
+      "description": "zh: 中文；en: English",
+      "default": "zh",
+      "options": [
+        "zh",
+        "en"
+      ]
+    },
+    "position": {
+      "type": "string",
+      "title": "Position / 位置",
+      "description": "below: under the prompt (default); above: above the prompt",
+      "default": "below",
+      "options": [
+        "below",
+        "above"
+      ]
+    },
+    "showContext": {
+      "type": "boolean",
+      "title": "Module: context / 模块：上下文",
+      "description": "Context bar with total usage.",
+      "default": true
+    },
+    "legend": {
+      "type": "boolean",
+      "title": "Module: category legend / 模块：分类明细",
+      "description": "The categories filling the context (biggest first) with tokens and share, under the context bar.",
+      "default": true
+    },
+    "legendLayout": {
+      "type": "string",
+      "title": "Legend layout / 明细排列",
+      "description": "grid: aligned columns folded into as few rows as fit (default); list: one category per row; inline: flowing, wrapping at the edge.",
+      "default": "grid",
+      "options": [
+        "grid",
+        "list",
+        "inline"
+      ]
+    },
+    "showLimits": {
+      "type": "boolean",
+      "title": "Module: plan limits / 模块：额度",
+      "description": "5h and 7d plan limits with reset time (Pro / Max).",
+      "default": true
+    },
+    "showCost": {
+      "type": "boolean",
+      "title": "Module: cost / 模块：花费",
+      "description": "Session cost in US dollars at the right of the limits row: what /cost totals, estimated at API list price (not the bill; on a subscription, usage within the plan is not charged this).",
+      "default": true
+    }
+  }
+}
