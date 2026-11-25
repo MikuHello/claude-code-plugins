@@ -95,9 +95,10 @@ const pct = (part: number, whole: number) => {
   return p > 0 && p < 0.1 ? '<0.1%' : `${p.toFixed(1)}%`
 }
 
+const WIDE = /[\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/
+
 /** Terminal cells a string takes: CJK and full-width forms take two. */
-const cellWidth = (text: string) =>
-  [...text].reduce((w, ch) => w + (/[\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(ch) ? 2 : 1), 0)
+const cellWidth = (text: string) => [...text].reduce((w, ch) => w + (WIDE.test(ch) ? 2 : 1), 0)
 
 const levelColor = (p: number) => (p < 50 ? 'success' : p < 80 ? 'warning' : 'error')
 
@@ -172,8 +173,8 @@ async function openSettings($: EngineInterface) {
 
 /** Writes one of this plugin's options as /config would; the module reloads with it. */
 async function setOption($: EngineInterface, field: string, value: string | boolean) {
-  const rows = await $.config.list()
-  const row = rows.find(r => r.key.startsWith('usage-band') && r.key.split('.').pop() === field)
+  const key = `usage-band.${field}` // a plugin's userConfig row is `<plugin>.<field>`
+  const row = (await $.config.list()).find(r => r.key === key)
   if (row) await $.config.set({ key: row.key, value })
 }
 
@@ -219,7 +220,10 @@ async function buildRows($: EngineInterface, ui: Ui, cols: number) {
     const usable = Math.max(1, max - bufferTokens)
     const left = Math.max(0, usable - usedTokens)
     const nearness = (usedTokens / usable) * 100 // how close auto-compact is
-    const barWidth = Math.max(20, Math.min(60, room - 16))
+    // Room after the bar for its tail at its widest (" 100.0% 999.9k / <max>"),
+    // so the bar keeps one width while the figures grow.
+    const tailW = 1 + 6 + 1 + 6 + 3 + fmtTokens(max).length
+    const barWidth = Math.max(20, Math.min(60, room - tailW))
     const isNear = hasBreakdown && nearness >= 80
 
     let bar
@@ -229,8 +233,23 @@ async function buildRows($: EngineInterface, ui: Ui, cols: number) {
       const parts: Array<{ scope?: string; color: string; units: number }> = hasBreakdown
         ? used.map(c => ({ scope: `cat-${c.name}`, color: c.color, units: Math.max(1, Math.round(c.tokens / unit)) }))
         : [{ color: levelColor(nearness), units: Math.max(1, Math.round(usedTokens / unit)) }]
-      const usedUnits = parts.reduce((a, p) => a + p.units, 0)
-      const bufferUnits = bufferTokens > 0 ? Math.max(2, Math.round(bufferTokens / unit)) : 0
+      let bufferUnits = bufferTokens > 0 ? Math.max(2, Math.round(bufferTokens / unit)) : 0
+      // The floors (a half for each category, two for the buffer) and the
+      // rounding can add up to more than the bar, most of all near compaction,
+      // when the bar is full: take the excess back a half at a time from the
+      // biggest run, which it distorts least.
+      let usedUnits = parts.reduce((a, p) => a + p.units, 0)
+      for (let over = usedUnits + bufferUnits - halves; over > 0; over--) {
+        const big = parts.reduce<(typeof parts)[number] | undefined>((m, p) => (m === undefined || p.units > m.units ? p : m), undefined)
+        if (bufferUnits > 2 && (big === undefined || bufferUnits >= big.units)) {
+          bufferUnits -= 1
+        } else if (big !== undefined && big.units > 1) {
+          big.units -= 1
+          usedUnits -= 1
+        } else {
+          break // every run at its floor: more categories than the bar has halves
+        }
+      }
       const freeUnits = Math.max(0, halves - usedUnits - bufferUnits)
 
       // One entry per half cell.
@@ -239,6 +258,7 @@ async function buildRows($: EngineInterface, ui: Ui, cols: number) {
       for (const p of parts) for (let k = 0; k < p.units; k++) seq.push({ kind: 'used', color: p.color, scope: p.scope })
       for (let k = 0; k < freeUnits; k++) seq.push({ kind: 'free' })
       for (let k = 0; k < bufferUnits; k++) seq.push({ kind: 'buffer' })
+      if (seq.length > halves) seq.length = halves // the floors alone overrun it: cut at the edge
 
       // Pair the halves into cells, then merge equal neighbours into runs.
       type Cell = { ch: string; color?: string; bg?: string; dim?: boolean; scope?: string; isFree?: boolean }
@@ -261,11 +281,14 @@ async function buildRows($: EngineInterface, ui: Ui, cols: number) {
         }
       }
 
-      const runs: Array<{ cell: Cell; n: number }> = []
+      // `isFree` is left out: only ░ carries it, and ░ always does.
+      const keyOf = (c: Cell) => `${c.ch}|${c.color ?? ''}|${c.bg ?? ''}|${c.scope ?? ''}|${c.dim ? 1 : 0}`
+      const runs: Array<{ cell: Cell; key: string; n: number }> = []
       for (const c of cells) {
+        const key = keyOf(c)
         const last = runs[runs.length - 1]
-        if (last && JSON.stringify(last.cell) === JSON.stringify(c)) last.n += 1
-        else runs.push({ cell: c, n: 1 })
+        if (last?.key === key) last.n += 1
+        else runs.push({ cell: c, key, n: 1 })
       }
 
       bar = runs.map(r => (
